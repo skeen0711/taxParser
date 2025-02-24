@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 )
@@ -24,7 +25,6 @@ type TaxRecord struct {
 	StateTax  float64
 }
 
-// Assume this is the JSON structure (adjust after seeing real response)
 type TaxRateResponse struct {
 	Rates []struct {
 		Jurisdiction string  `json:"jurisdiction"`
@@ -35,38 +35,27 @@ type TaxRateResponse struct {
 }
 
 func main() {
-	http.HandleFunc("/taxScraper", taxScraperHandler)
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-
-func taxScraperHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	err := r.ParseMultipartForm(10 << 20)
+	// Open input CSV
+	inputFile, err := os.Open("taxFinderTest1.csv")
 	if err != nil {
-		http.Error(w, "Error parsing form", http.StatusBadRequest)
-		return
+		log.Fatalf("Error opening input CSV: %v", err)
 	}
+	defer inputFile.Close()
 
-	file, _, err := r.FormFile("csvFile")
+	// Process CSV
+	records, err := processCSV(inputFile)
 	if err != nil {
-		http.Error(w, "Error retrieving file", http.StatusBadRequest)
-		return
+		log.Fatalf("Error processing CSV: %v", err)
 	}
-	defer file.Close()
 
-	records, err := processCSV(file)
+	// Write output CSV
+	outputFile, err := os.Create("output.csv")
 	if err != nil {
-		http.Error(w, "Error processing CSV: "+err.Error(), http.StatusInternalServerError)
-		return
+		log.Fatalf("Error creating output CSV: %v", err)
 	}
+	defer outputFile.Close()
 
-	w.Header().Set("Content-Disposition", "attachment; filename=output.csv")
-	w.Header().Set("Content-Type", "text/csv")
-	writer := csv.NewWriter(w)
+	writer := csv.NewWriter(outputFile)
 	defer writer.Flush()
 
 	writer.Write([]string{"client", "charge", "street address", "city", "State", "zip code", "city tax", "county tax", "state tax"})
@@ -83,12 +72,15 @@ func taxScraperHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("%.2f", rec.StateTax),
 		})
 	}
+
+	fmt.Println("Processing complete. Output written to output.csv")
 }
 
-func processCSV(file io.Reader) ([]TaxRecord, error) {
+func processCSV(file *os.File) ([]TaxRecord, error) {
 	reader := csv.NewReader(file)
 	records := []TaxRecord{}
 
+	// Read header
 	header, err := reader.Read()
 	if err != nil {
 		return nil, err
@@ -98,6 +90,7 @@ func processCSV(file io.Reader) ([]TaxRecord, error) {
 		return nil, fmt.Errorf("invalid CSV header: got %v, expected %v", header, expected)
 	}
 
+	// Read rows
 	for {
 		row, err := reader.Read()
 		if err == io.EOF {
@@ -137,29 +130,25 @@ func processCSV(file io.Reader) ([]TaxRecord, error) {
 }
 
 func scrapeTaxRates(street, city, state, zip string) (float64, float64, float64, error) {
-	// Build query parameters
 	params := url.Values{
 		"state":   {state},
 		"city":    {city},
 		"zipcode": {zip},
 		"street":  {street},
-		"quarter": {"1"},                             // Hardcoded for now
-		"year":    {strconv.Itoa(time.Now().Year())}, // Current year (2025 as of Feb 23, 2025)
+		"quarter": {"1"},
+		"year":    {strconv.Itoa(time.Now().Year())},
 	}
 
-	// Create request
 	req, err := http.NewRequest("GET", "https://mulesoft.cpa.texas.gov:8088/api/cpa/gis/v1/salestaxrate/salestaxrate?"+params.Encode(), nil)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	// Add required headers
 	req.Header.Set("client_id", "7cf772234a1744cfa78840c848e2d121")
 	req.Header.Set("client_secret", "F00Fcb198e944A18A208EF7033C9B219")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)")
 
-	// Send request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -171,13 +160,11 @@ func scrapeTaxRates(street, city, state, zip string) (float64, float64, float64,
 		return 0, 0, 0, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Parse JSON response
 	var taxData TaxRateResponse
 	if err := json.NewDecoder(resp.Body).Decode(&taxData); err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to parse JSON: %v", err)
 	}
 
-	// Extract rates
 	var cityRate, countyRate, stateRate float64
 	for _, rate := range taxData.Rates {
 		switch rate.Type {
