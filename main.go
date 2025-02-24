@@ -40,16 +40,18 @@ type TaxRateResponse struct {
 }
 
 func main() {
-	logFile, err := os.Create("debug.log")
-	if err != nil {
-		log.Fatalf("Error creating log file: %v", err)
-	}
+	//logFile, err := os.Create("debug.log")
+	//if err != nil {
+	//	log.Fatalf("Error creating log file: %v", err)
+	//}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	defer logFile.Close()
-	log.SetOutput(logFile)
+	//defer logFile.Close()
+	//log.SetOutput(logFile)
+	log.SetOutput(os.Stdout)
 
 	//http.HandleFunc("/getTaxRates", taxRatesHandler)
 	// wrapping function handler to resolve CORS issues
@@ -62,7 +64,7 @@ func main() {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*") // Allow all origins (or specify your GitHub Pages URL)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
