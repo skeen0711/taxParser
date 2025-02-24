@@ -1,0 +1,213 @@
+2025/02/23 23:38:17 API request URL: https://mulesoft.cpa.texas.gov:8088/api/cpa/gis/v1/salestaxrate/salestaxrate?city=New+Caney&quarter=1&state=TX&street=22006+Pinebrook+Dr&year=2025&zipcode=77357
+2025/02/23 23:38:17 API response status: 200
+2025/02/23 23:38:17 Raw API response: {
+  "STREET": "22006 PINEBROOK DR",
+  "CITY": "NEW CANEY",
+  "STATE": "TX",
+  "ZIPCODE": "77357",
+  "ZIP4": "3916",
+  "COUNTYCODE": "170",
+  "LATITUDE": "30.168682",
+  "LONGITUDE": "-95.233007",
+  "INCORPORATIONCODE": "N",
+  "INBUFRCD": "N",
+  "GISRETURNCODE": "P",
+  "LONGITUDELATITUDELVL": "R",
+  "TAIDS": [
+    {
+      "TAID": "1"
+    },
+    {
+      "TAID": "5170576"
+    },
+    {
+      "TAID": "5170692"
+    }
+  ],
+  "CODE1ONLY": "N",
+  "JURISDATE": "1/01/2025",
+  "GENRETURNCODE": "",
+  "APTRETURNCODE": "",
+  "ADDRESSTYPECODE": "S",
+  "ADDRESSALIASCODE": "",
+  "STREETMATCHCODE": "M",
+  "PROBABLECORRECTNESS": "0",
+  "DIRECTIONRETURNCODE": "",
+  "SUFFIXRETURNCODE": "",
+  "CPACOUNTYNAME": "MONTGOMERY",
+  "FIPSSTATECODE": "48",
+  "FIPSCOUNTYCODE": "339",
+  "FIPSCOUNTYNAME": "MONTGOMERY",
+  "GNISCITYCODE": "",
+  "GNISCITYNAME": "",
+  "CONFIDENCECODE": "H",
+  "JURISCITYDESCRIPTION": "",
+  "TOTALTAXRATE": "825000",
+  "TOTALTAXMSG": "RATE VALID FOR CURRENT QUARTER ONLY",
+  "TAXRATES": [
+    {
+      "JURISNAME": "TEXAS",
+      "JURISCODE": "1",
+      "JURISTYPE": "STATE",
+      "JURISRATE": ".0625000"
+    },
+    {
+      "JURISNAME": "MONTGOMERY CO ESD 7",
+      "JURISCODE": "5170576",
+      "JURISTYPE": "SPD",
+      "JURISRATE": ".0050000"
+    },
+    {
+      "JURISNAME": "E MONT CO IMP DIST A",
+      "JURISCODE": "5170692",
+      "JURISTYPE": "SPD",
+      "JURISRATE": ".0150000"
+    }
+  ],
+  "MULTIMATCHES": [
+    
+  ]
+}
+2025/02/23 23:38:17 Parsed rates - City: 0.000000, County: 0.000000, State: 0.062500
+2025/02/23 23:38:18 API request URL: https://mulesoft.cpa.texas.gov:8088/api/cpa/gis/v1/salestaxrate/salestaxrate?city=College+Station&quarter=1&state=TX&street=6208+Raleigh+Dr&year=2025&zipcode=77845
+2025/02/23 23:38:18 API response status: 200
+2025/02/23 23:38:18 Raw API response: {
+  "STREET": "6208 RALEIGH DR",
+  "CITY": "COLLEGE STATION",
+  "STATE": "TX",
+  "ZIPCODE": "77845",
+  "ZIP4": "7071",
+  "COUNTYCODE": "21",
+  "LATITUDE": "30.56954",
+  "LONGITUDE": "-96.287104",
+  "INCORPORATIONCODE": "Y",
+  "INBUFRCD": "N",
+  "GISRETURNCODE": "5",
+  "LONGITUDELATITUDELVL": "5",
+  "TAIDS": [
+    {
+      "TAID": "1"
+    },
+    {
+      "TAID": "4021005"
+    },
+    {
+      "TAID": "2021014"
+    }
+  ],
+  "CODE1ONLY": "N",
+  "JURISDATE": "1/01/2025",
+  "GENRETURNCODE": "",
+  "APTRETURNCODE": "",
+  "ADDRESSTYPECODE": "S",
+  "ADDRESSALIASCODE": "",
+  "STREETMATCHCODE": "M",
+  "PROBABLECORRECTNESS": "0",
+  "DIRECTIONRETURNCODE": "",
+  "SUFFIXRETURNCODE": "",
+  "CPACOUNTYNAME": "BRAZOS",
+  "FIPSSTATECODE": "48",
+  "FIPSCOUNTYCODE": "041",
+  "FIPSCOUNTYNAME": "BRAZOS",
+  "GNISCITYCODE": "002410193",
+  "GNISCITYNAME": "COLLEGE STATION",
+  "CONFIDENCECODE": "M",
+  "JURISCITYDESCRIPTION": "COLLEGE STATION",
+  "TOTALTAXRATE": "825000",
+  "TOTALTAXMSG": "RATE VALID FOR CURRENT QUARTER ONLY",
+  "TAXRATES": [
+    {
+      "JURISNAME": "TEXAS",
+      "JURISCODE": "1",
+      "JURISTYPE": "STATE",
+      "JURISRATE": ".0625000"
+    },
+    {
+      "JURISNAME": "BRAZOS",
+      "JURISCODE": "4021005",
+      "JURISTYPE": "COUNTY",
+      "JURISRATE": ".0050000"
+    },
+    {
+      "JURISNAME": "COLLEGE STATION",
+      "JURISCODE": "2021014",
+      "JURISTYPE": "CITY",
+      "JURISRATE": ".0150000"
+    }
+  ],
+  "MULTIMATCHES": [
+    
+  ]
+}
+2025/02/23 23:38:18 Parsed rates - City: 0.015000, County: 0.005000, State: 0.062500
+2025/02/23 23:38:19 API request URL: https://mulesoft.cpa.texas.gov:8088/api/cpa/gis/v1/salestaxrate/salestaxrate?city=College+Station&quarter=1&state=TX&street=3821+Stoney+Creek+Lane&year=2025&zipcode=77845
+2025/02/23 23:38:19 API response status: 200
+2025/02/23 23:38:19 Raw API response: {
+  "STREET": "3821 STONY CREEK LN",
+  "CITY": "COLLEGE STATION",
+  "STATE": "TX",
+  "ZIPCODE": "77845",
+  "ZIP4": "4022",
+  "COUNTYCODE": "21",
+  "LATITUDE": "30.566365",
+  "LONGITUDE": "-96.279083",
+  "INCORPORATIONCODE": "Y",
+  "INBUFRCD": "N",
+  "GISRETURNCODE": "P",
+  "LONGITUDELATITUDELVL": "R",
+  "TAIDS": [
+    {
+      "TAID": "1"
+    },
+    {
+      "TAID": "4021005"
+    },
+    {
+      "TAID": "2021014"
+    }
+  ],
+  "CODE1ONLY": "N",
+  "JURISDATE": "1/01/2025",
+  "GENRETURNCODE": "",
+  "APTRETURNCODE": "",
+  "ADDRESSTYPECODE": "S",
+  "ADDRESSALIASCODE": "",
+  "STREETMATCHCODE": "M",
+  "PROBABLECORRECTNESS": "2",
+  "DIRECTIONRETURNCODE": "",
+  "SUFFIXRETURNCODE": "",
+  "CPACOUNTYNAME": "BRAZOS",
+  "FIPSSTATECODE": "48",
+  "FIPSCOUNTYCODE": "041",
+  "FIPSCOUNTYNAME": "BRAZOS",
+  "GNISCITYCODE": "002410193",
+  "GNISCITYNAME": "COLLEGE STATION",
+  "CONFIDENCECODE": "H",
+  "JURISCITYDESCRIPTION": "COLLEGE STATION",
+  "TOTALTAXRATE": "825000",
+  "TOTALTAXMSG": "RATE VALID FOR CURRENT QUARTER ONLY",
+  "TAXRATES": [
+    {
+      "JURISNAME": "TEXAS",
+      "JURISCODE": "1",
+      "JURISTYPE": "STATE",
+      "JURISRATE": ".0625000"
+    },
+    {
+      "JURISNAME": "BRAZOS",
+      "JURISCODE": "4021005",
+      "JURISTYPE": "COUNTY",
+      "JURISRATE": ".0050000"
+    },
+    {
+      "JURISNAME": "COLLEGE STATION",
+      "JURISCODE": "2021014",
+      "JURISTYPE": "CITY",
+      "JURISRATE": ".0150000"
+    }
+  ],
+  "MULTIMATCHES": [
+    
+  ]
+}
+2025/02/23 23:38:19 Parsed rates - City: 0.015000, County: 0.005000, State: 0.062500

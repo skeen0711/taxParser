@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -26,29 +27,37 @@ type TaxRecord struct {
 }
 
 type TaxRateResponse struct {
-	Rates []struct {
-		Jurisdiction string  `json:"jurisdiction"`
-		Type         string  `json:"type"`
-		Rate         float64 `json:"rate"`
-	} `json:"rates"`
-	TotalRate float64 `json:"total_rate"`
+	TaxRates []struct {
+		JurisName string `json:"JURISNAME"`
+		JurisType string `json:"JURISTYPE"`
+		JurisRate string `json:"JURISRATE"`
+	} `json:"TAXRATES"`
+	TotalTaxRate  string `json:"TOTALTAXRATE"`
+	Street        string `json:"STREET"` // To verify address match
+	City          string `json:"CITY"`
+	ZipCode       string `json:"ZIPCODE"`
+	GisReturnCode string `json:"GISRETURNCODE"` // "P" for precise match, might indicate no match
 }
 
 func main() {
-	// Open input CSV
+	logFile, err := os.Create("debug.log")
+	if err != nil {
+		log.Fatalf("Error creating log file: %v", err)
+	}
+	defer logFile.Close()
+	log.SetOutput(logFile)
+
 	inputFile, err := os.Open("taxFinderTest1.csv")
 	if err != nil {
 		log.Fatalf("Error opening input CSV: %v", err)
 	}
 	defer inputFile.Close()
 
-	// Process CSV
 	records, err := processCSV(inputFile)
 	if err != nil {
 		log.Fatalf("Error processing CSV: %v", err)
 	}
 
-	// Write output CSV
 	outputFile, err := os.Create("output.csv")
 	if err != nil {
 		log.Fatalf("Error creating output CSV: %v", err)
@@ -80,7 +89,6 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 	reader := csv.NewReader(file)
 	records := []TaxRecord{}
 
-	// Read header
 	header, err := reader.Read()
 	if err != nil {
 		return nil, err
@@ -90,7 +98,6 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 		return nil, fmt.Errorf("invalid CSV header: got %v, expected %v", header, expected)
 	}
 
-	// Read rows
 	for {
 		row, err := reader.Read()
 		if err == io.EOF {
@@ -98,6 +105,11 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 		}
 		if err != nil {
 			return nil, err
+		}
+
+		// Strip whitespace from all fields
+		for i := range row {
+			row[i] = strings.TrimSpace(row[i])
 		}
 
 		charge, err := strconv.ParseFloat(row[1], 64)
@@ -156,29 +168,63 @@ func scrapeTaxRates(street, city, state, zip string) (float64, float64, float64,
 	}
 	defer resp.Body.Close()
 
+	log.Printf("API request URL: %s", req.URL.String())
+	log.Printf("API response status: %d", resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to read response body: %v", err)
+	}
+	log.Printf("Raw API response: %s", string(body))
+
 	if resp.StatusCode != http.StatusOK {
-		return 0, 0, 0, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return 0, 0, 0, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode, string(body))
 	}
 
 	var taxData TaxRateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&taxData); err != nil {
-		return 0, 0, 0, fmt.Errorf("failed to parse JSON: %v", err)
+	if err := json.Unmarshal(body, &taxData); err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to parse JSON: %v - raw response: %s", err, string(body))
+	}
+
+	// Check if address matches input (case-insensitive)
+	inputStreet := strings.ToUpper(street)
+	inputCity := strings.ToUpper(city)
+	inputZip := zip
+	returnedStreet := strings.ToUpper(taxData.Street)
+	returnedCity := strings.ToUpper(taxData.City)
+	returnedZip := taxData.ZipCode
+
+	if inputStreet != returnedStreet || inputCity != returnedCity || inputZip != returnedZip {
+		log.Printf("Warning: Address mismatch - Input: %s, %s, %s; Returned: %s, %s, %s",
+			inputStreet, inputCity, inputZip, returnedStreet, returnedCity, returnedZip)
 	}
 
 	var cityRate, countyRate, stateRate float64
-	for _, rate := range taxData.Rates {
-		switch rate.Type {
+	for _, rate := range taxData.TaxRates {
+		r, err := strconv.ParseFloat(rate.JurisRate, 64)
+		if err != nil {
+			log.Printf("Warning: Failed to parse rate %s for %s: %v", rate.JurisRate, rate.JurisType, err)
+			continue
+		}
+		switch rate.JurisType {
 		case "STATE":
-			stateRate = rate.Rate
+			stateRate = r
 		case "COUNTY":
-			countyRate = rate.Rate
+			countyRate = r
 		case "CITY":
-			cityRate = rate.Rate
+			cityRate = r
 		}
 	}
 
+	log.Printf("Parsed rates - City: %f, County: %f, State: %f", cityRate, countyRate, stateRate)
+
 	if stateRate == 0 {
-		return 0, 0, 0, fmt.Errorf("no state tax rate found")
+		return 0, 0, 0, fmt.Errorf("no state tax rate found in response: %+v", taxData)
+	}
+
+	// Log if fewer than expected rates are found
+	if len(taxData.TaxRates) < 3 {
+		log.Printf("Warning: Only %d tax rates found (expected 3: CITY, COUNTY, STATE)", len(taxData.TaxRates))
 	}
 
 	return cityRate, countyRate, stateRate, nil
