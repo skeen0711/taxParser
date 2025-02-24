@@ -11,11 +11,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type TaxRecord struct {
 	Client    string
+	Date      string // Keep as string for output
 	Charge    float64
 	Street    string
 	City      string
@@ -33,10 +33,10 @@ type TaxRateResponse struct {
 		JurisRate string `json:"JURISRATE"`
 	} `json:"TAXRATES"`
 	TotalTaxRate  string `json:"TOTALTAXRATE"`
-	Street        string `json:"STREET"` // To verify address match
+	Street        string `json:"STREET"`
 	City          string `json:"CITY"`
 	ZipCode       string `json:"ZIPCODE"`
-	GisReturnCode string `json:"GISRETURNCODE"` // "P" for precise match, might indicate no match
+	GisReturnCode string `json:"GISRETURNCODE"`
 }
 
 func main() {
@@ -67,10 +67,11 @@ func main() {
 	writer := csv.NewWriter(outputFile)
 	defer writer.Flush()
 
-	writer.Write([]string{"client", "charge", "street address", "city", "State", "zip code", "city tax", "county tax", "state tax"})
+	writer.Write([]string{"client", "date", "charge", "street address", "city", "State", "zip code", "city tax", "county tax", "state tax"})
 	for _, rec := range records {
 		writer.Write([]string{
 			rec.Client,
+			rec.Date,
 			fmt.Sprintf("%.2f", rec.Charge),
 			rec.Street,
 			rec.City,
@@ -89,15 +90,17 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 	reader := csv.NewReader(file)
 	records := []TaxRecord{}
 
+	// Read header
 	header, err := reader.Read()
 	if err != nil {
 		return nil, err
 	}
-	expected := []string{"client", "charge", "street address", "city", "State", "zip code"}
+	expected := []string{"client", "date", "charge", "street address", "city", "State", "zip code"}
 	if !equal(header, expected) {
 		return nil, fmt.Errorf("invalid CSV header: got %v, expected %v", header, expected)
 	}
 
+	// Read rows
 	for {
 		row, err := reader.Read()
 		if err == io.EOF {
@@ -112,21 +115,43 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 			row[i] = strings.TrimSpace(row[i])
 		}
 
-		charge, err := strconv.ParseFloat(row[1], 64)
+		// Parse date (DD/MM/YYYY)
+		dateParts := strings.Split(row[1], "/")
+		if len(dateParts) != 3 {
+			return nil, fmt.Errorf("invalid date format for client %s: %s", row[0], row[1])
+		}
+		day, err := strconv.Atoi(dateParts[1])
+		if err != nil || day < 1 || day > 31 {
+			return nil, fmt.Errorf("invalid day in date for client %s: %s", row[0], row[1])
+		}
+		month, err := strconv.Atoi(dateParts[0])
+		if err != nil || month < 1 || month > 12 {
+			return nil, fmt.Errorf("invalid month in date for client %s: %s", row[0], row[1])
+		}
+		year, err := strconv.Atoi(dateParts[2])
+		if err != nil || year < 2000 {
+			return nil, fmt.Errorf("invalid year in date for client %s: %s", row[0], row[1])
+		}
+
+		// Calculate quarter (1=Jan-Mar, 2=Apr-Jun, 3=Jul-Sep, 4=Oct-Dec)
+		quarter := (month-1)/3 + 1
+
+		charge, err := strconv.ParseFloat(row[2], 64)
 		if err != nil {
 			return nil, fmt.Errorf("invalid charge for client %s: %v", row[0], err)
 		}
 
 		rec := TaxRecord{
 			Client: row[0],
+			Date:   row[1],
 			Charge: charge,
-			Street: row[2],
-			City:   row[3],
-			State:  row[4],
-			Zip:    row[5],
+			Street: row[3],
+			City:   row[4],
+			State:  row[5],
+			Zip:    row[6],
 		}
 
-		cityRate, countyRate, stateRate, err := scrapeTaxRates(rec.Street, rec.City, rec.State, rec.Zip)
+		cityRate, countyRate, stateRate, err := scrapeTaxRates(rec.Street, rec.City, rec.State, rec.Zip, quarter, year)
 		if err != nil {
 			return nil, fmt.Errorf("error scraping tax rates for %s: %v", rec.Client, err)
 		}
@@ -141,14 +166,14 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 	return records, nil
 }
 
-func scrapeTaxRates(street, city, state, zip string) (float64, float64, float64, error) {
+func scrapeTaxRates(street, city, state, zip string, quarter, year int) (float64, float64, float64, error) {
 	params := url.Values{
 		"state":   {state},
 		"city":    {city},
 		"zipcode": {zip},
 		"street":  {street},
-		"quarter": {"1"},
-		"year":    {strconv.Itoa(time.Now().Year())},
+		"quarter": {strconv.Itoa(quarter)},
+		"year":    {strconv.Itoa(year)},
 	}
 
 	req, err := http.NewRequest("GET", "https://mulesoft.cpa.texas.gov:8088/api/cpa/gis/v1/salestaxrate/salestaxrate?"+params.Encode(), nil)
@@ -186,7 +211,6 @@ func scrapeTaxRates(street, city, state, zip string) (float64, float64, float64,
 		return 0, 0, 0, fmt.Errorf("failed to parse JSON: %v - raw response: %s", err, string(body))
 	}
 
-	// Check if address matches input (case-insensitive)
 	inputStreet := strings.ToUpper(street)
 	inputCity := strings.ToUpper(city)
 	inputZip := zip
@@ -222,7 +246,6 @@ func scrapeTaxRates(street, city, state, zip string) (float64, float64, float64,
 		return 0, 0, 0, fmt.Errorf("no state tax rate found in response: %+v", taxData)
 	}
 
-	// Log if fewer than expected rates are found
 	if len(taxData.TaxRates) < 3 {
 		log.Printf("Warning: Only %d tax rates found (expected 3: CITY, COUNTY, STATE)", len(taxData.TaxRates))
 	}
