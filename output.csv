@@ -1,4 +1,8 @@
-client,charge,street address,city,State,zip code,city tax,county tax,state tax
-Dad,100.00,22006 Pinebrook Dr,New Caney,TX,77357,0.00,0.00,6.25
-Stephen,200.00,6208 Raleigh Dr,College Station,TX,77845,3.00,1.00,12.50
-Alice,100.00,3821 Stoney Creek Lane,College Station,TX,77845,1.50,0.50,6.25
+client,date,charge,street address,city,State,zip code,city tax,county tax,state tax
+Alice,01/12/2025,100.00,3821 Stoney Creek Lane,College Station,TX,77845,1.50,0.50,6.25
+Bill,01/16/2025,200.00,602 Plano Dr,College Station,TX,77845,3.00,1.00,12.50
+Aaron,01/06/2025,226.79,7010 Palomino Rd,College Station,TX,77845,0.00,1.13,14.17
+Will,01/19/2025,300.00,1109 Wheelock St,Hearne,TX,77859,6.00,0.00,18.75
+Dad,01/15/2025,100.00,22006 Pinebrook Dr,New Caney,TX,77357,0.00,0.00,6.25
+Stephen,01/13/2025,200.00,6208 Raleigh Dr,College Station,TX,77845,3.00,1.00,12.50
+Alice,01/22/2025,100.00,3821 Stoney Creek Lane,College Station,TX,77845,1.50,0.50,6.25

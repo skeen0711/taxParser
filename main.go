@@ -52,7 +52,7 @@ func main() {
 	log.SetOutput(logFile)
 
 	//http.HandleFunc("/getTaxRates", taxRatesHandler)
-
+	// wrapping function handler to resolve CORS issues
 	handler := http.HandlerFunc(taxRatesHandler)
 	http.Handle("/getTaxRates", corsMiddleware(handler))
 
