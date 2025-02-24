@@ -64,7 +64,7 @@ func main() {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", "https://skeen0711.github.io")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
@@ -103,7 +103,14 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename=output.csv")
+	/*
+		// Set headers for download
+		    w.Header().Set("Content-Type", "text/csv")
+		    w.Header().Set("Content-Disposition", "attachment; filename=\"result.csv\"")
+		    w.Write(modifiedCSV)
+	*/
+
+	w.Header().Set("Content-Disposition", "attachment; filename=\"result.csv\"")
 	w.Header().Set("Content-Type", "text/csv")
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
