@@ -15,7 +15,7 @@ import (
 
 type TaxRecord struct {
 	Client    string
-	Date      string // Keep as string for output
+	Date      string
 	Charge    float64
 	Street    string
 	City      string
@@ -44,27 +44,66 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating log file: %v", err)
 	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
-	inputFile, err := os.Open("taxFinderTest1.csv")
-	if err != nil {
-		log.Fatalf("Error opening input CSV: %v", err)
-	}
-	defer inputFile.Close()
+	//http.HandleFunc("/getTaxRates", taxRatesHandler)
 
-	records, err := processCSV(inputFile)
-	if err != nil {
-		log.Fatalf("Error processing CSV: %v", err)
+	handler := http.HandlerFunc(taxRatesHandler)
+	http.Handle("/getTaxRates", corsMiddleware(handler))
+
+	log.Printf("Starting server on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*") // Allow all origins (or specify your GitHub Pages URL)
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// Handle preflight OPTIONS request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
-	outputFile, err := os.Create("output.csv")
+	err := r.ParseMultipartForm(10 << 20)
 	if err != nil {
-		log.Fatalf("Error creating output CSV: %v", err)
+		http.Error(w, "Error parsing form", http.StatusBadRequest)
+		return
 	}
-	defer outputFile.Close()
 
-	writer := csv.NewWriter(outputFile)
+	file, _, err := r.FormFile("csvFile")
+	if err != nil {
+		http.Error(w, "Error retrieving file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	records, err := processCSV(file)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error processing CSV: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Disposition", "attachment; filename=output.csv")
+	w.Header().Set("Content-Type", "text/csv")
+	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
 	writer.Write([]string{"client", "date", "charge", "street address", "city", "State", "zip code", "city tax", "county tax", "state tax"})
@@ -82,15 +121,12 @@ func main() {
 			fmt.Sprintf("%.2f", rec.StateTax),
 		})
 	}
-
-	fmt.Println("Processing complete. Output written to output.csv")
 }
 
-func processCSV(file *os.File) ([]TaxRecord, error) {
+func processCSV(file io.Reader) ([]TaxRecord, error) {
 	reader := csv.NewReader(file)
 	records := []TaxRecord{}
 
-	// Read header
 	header, err := reader.Read()
 	if err != nil {
 		return nil, err
@@ -100,7 +136,6 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 		return nil, fmt.Errorf("invalid CSV header: got %v, expected %v", header, expected)
 	}
 
-	// Read rows
 	for {
 		row, err := reader.Read()
 		if err == io.EOF {
@@ -110,30 +145,27 @@ func processCSV(file *os.File) ([]TaxRecord, error) {
 			return nil, err
 		}
 
-		// Strip whitespace from all fields
 		for i := range row {
 			row[i] = strings.TrimSpace(row[i])
 		}
 
-		// Parse date (DD/MM/YYYY)
 		dateParts := strings.Split(row[1], "/")
 		if len(dateParts) != 3 {
 			return nil, fmt.Errorf("invalid date format for client %s: %s", row[0], row[1])
 		}
-		day, err := strconv.Atoi(dateParts[1])
-		if err != nil || day < 1 || day > 31 {
-			return nil, fmt.Errorf("invalid day in date for client %s: %s", row[0], row[1])
-		}
 		month, err := strconv.Atoi(dateParts[0])
 		if err != nil || month < 1 || month > 12 {
 			return nil, fmt.Errorf("invalid month in date for client %s: %s", row[0], row[1])
+		}
+		day, err := strconv.Atoi(dateParts[1])
+		if err != nil || day < 1 || day > 31 {
+			return nil, fmt.Errorf("invalid day in date for client %s: %s", row[0], row[1])
 		}
 		year, err := strconv.Atoi(dateParts[2])
 		if err != nil || year < 2000 {
 			return nil, fmt.Errorf("invalid year in date for client %s: %s", row[0], row[1])
 		}
 
-		// Calculate quarter (1=Jan-Mar, 2=Apr-Jun, 3=Jul-Sep, 4=Oct-Dec)
 		quarter := (month-1)/3 + 1
 
 		charge, err := strconv.ParseFloat(row[2], 64)
