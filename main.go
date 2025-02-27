@@ -14,16 +14,14 @@ import (
 )
 
 type TaxRecord struct {
-	Client    string
-	Date      string
-	Charge    float64
-	Street    string
-	City      string
-	State     string
-	Zip       string
-	CityTax   float64
-	CountyTax float64
-	StateTax  float64
+	Client string
+	Date   string
+	Charge float64
+	Street string
+	City   string
+	State  string
+	Zip    string
+	Taxes  map[string]float64 // Changed from individual tax fields to map
 }
 
 type TaxRateResponse struct {
@@ -46,7 +44,6 @@ func main() {
 	}
 	log.SetOutput(os.Stdout)
 
-	// wrapping function handler to resolve CORS issues
 	handler := http.HandlerFunc(taxRatesHandler)
 	http.Handle("/getTaxRates", corsMiddleware(handler))
 
@@ -60,7 +57,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-		// Handle preflight OPTIONS request
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -99,9 +95,15 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
-	writer.Write([]string{"client", "date", "charge", "street address", "city", "State", "zip code", "city tax", "county tax", "state tax"})
+	// Get all unique jurisdiction names for headers
+	jurisNames := getAllJurisNames(records)
+
+	headers := []string{"client", "date", "charge", "street address", "city", "State", "zip code"}
+	headers = append(headers, jurisNames...)
+	writer.Write(headers)
+
 	for _, rec := range records {
-		writer.Write([]string{
+		row := []string{
 			rec.Client,
 			rec.Date,
 			fmt.Sprintf("%.2f", rec.Charge),
@@ -109,11 +111,29 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 			rec.City,
 			rec.State,
 			rec.Zip,
-			fmt.Sprintf("%.2f", rec.CityTax),
-			fmt.Sprintf("%.2f", rec.CountyTax),
-			fmt.Sprintf("%.2f", rec.StateTax),
-		})
+		}
+		// Add tax amounts for each jurisdiction in the same order as headers
+		for _, juris := range jurisNames {
+			tax := rec.Taxes[juris]
+			row = append(row, fmt.Sprintf("%.2f", tax))
+		}
+		writer.Write(row)
 	}
+}
+
+// Helper function to get all unique jurisdiction names
+func getAllJurisNames(records []TaxRecord) []string {
+	jurisSet := make(map[string]bool)
+	for _, rec := range records {
+		for juris := range rec.Taxes {
+			jurisSet[juris] = true
+		}
+	}
+	var jurisNames []string
+	for juris := range jurisSet {
+		jurisNames = append(jurisNames, juris)
+	}
+	return jurisNames
 }
 
 func processCSV(file io.Reader) ([]TaxRecord, error) {
@@ -174,16 +194,17 @@ func processCSV(file io.Reader) ([]TaxRecord, error) {
 			City:   row[4],
 			State:  row[5],
 			Zip:    row[6],
+			Taxes:  make(map[string]float64),
 		}
 
-		cityRate, countyRate, stateRate, err := scrapeTaxRates(rec.Street, rec.City, rec.State, rec.Zip, quarter, year)
+		taxRates, err := scrapeTaxRates(rec.Street, rec.City, rec.State, rec.Zip, quarter, year)
 		if err != nil {
 			return nil, fmt.Errorf("error scraping tax rates for %s: %v", rec.Client, err)
 		}
 
-		rec.CityTax = charge * cityRate
-		rec.CountyTax = charge * countyRate
-		rec.StateTax = charge * stateRate
+		for juris, rate := range taxRates {
+			rec.Taxes[juris] = charge * rate
+		}
 
 		records = append(records, rec)
 	}
@@ -191,7 +212,7 @@ func processCSV(file io.Reader) ([]TaxRecord, error) {
 	return records, nil
 }
 
-func scrapeTaxRates(street, city, state, zip string, quarter, year int) (float64, float64, float64, error) {
+func scrapeTaxRates(street, city, state, zip string, quarter, year int) (map[string]float64, error) {
 	params := url.Values{
 		"state":   {state},
 		"city":    {city},
@@ -203,7 +224,7 @@ func scrapeTaxRates(street, city, state, zip string, quarter, year int) (float64
 
 	req, err := http.NewRequest("GET", "https://mulesoft.cpa.texas.gov:8088/api/cpa/gis/v1/salestaxrate/salestaxrate?"+params.Encode(), nil)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
 	req.Header.Set("client_id", "7cf772234a1744cfa78840c848e2d121")
@@ -214,7 +235,7 @@ func scrapeTaxRates(street, city, state, zip string, quarter, year int) (float64
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("failed to fetch tax rates: %v", err)
+		return nil, fmt.Errorf("failed to fetch tax rates: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -223,59 +244,36 @@ func scrapeTaxRates(street, city, state, zip string, quarter, year int) (float64
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("failed to read response body: %v", err)
+		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 	log.Printf("Raw API response: %s", string(body))
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, 0, 0, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode, string(body))
 	}
 
 	var taxData TaxRateResponse
 	if err := json.Unmarshal(body, &taxData); err != nil {
-		return 0, 0, 0, fmt.Errorf("failed to parse JSON: %v - raw response: %s", err, string(body))
+		return nil, fmt.Errorf("failed to parse JSON: %v - raw response: %s", err, string(body))
 	}
 
-	inputStreet := strings.ToUpper(street)
-	inputCity := strings.ToUpper(city)
-	inputZip := zip
-	returnedStreet := strings.ToUpper(taxData.Street)
-	returnedCity := strings.ToUpper(taxData.City)
-	returnedZip := taxData.ZipCode
-
-	if inputStreet != returnedStreet || inputCity != returnedCity || inputZip != returnedZip {
-		log.Printf("Warning: Address mismatch - Input: %s, %s, %s; Returned: %s, %s, %s",
-			inputStreet, inputCity, inputZip, returnedStreet, returnedCity, returnedZip)
-	}
-
-	var cityRate, countyRate, stateRate float64
+	taxRates := make(map[string]float64)
 	for _, rate := range taxData.TaxRates {
 		r, err := strconv.ParseFloat(rate.JurisRate, 64)
 		if err != nil {
-			log.Printf("Warning: Failed to parse rate %s for %s: %v", rate.JurisRate, rate.JurisType, err)
+			log.Printf("Warning: Failed to parse rate %s for %s: %v", rate.JurisRate, rate.JurisName, err)
 			continue
 		}
-		switch rate.JurisType {
-		case "STATE":
-			stateRate = r
-		case "COUNTY":
-			countyRate = r
-		case "CITY":
-			cityRate = r
-		}
+		taxRates[rate.JurisName] = r
 	}
 
-	log.Printf("Parsed rates - City: %f, County: %f, State: %f", cityRate, countyRate, stateRate)
+	log.Printf("Parsed rates: %+v", taxRates)
 
-	if stateRate == 0 {
-		return 0, 0, 0, fmt.Errorf("no state tax rate found in response: %+v", taxData)
+	if len(taxRates) == 0 {
+		return nil, fmt.Errorf("no tax rates found in response: %+v", taxData)
 	}
 
-	if len(taxData.TaxRates) < 3 {
-		log.Printf("Warning: Only %d tax rates found (expected 3: CITY, COUNTY, STATE)", len(taxData.TaxRates))
-	}
-
-	return cityRate, countyRate, stateRate, nil
+	return taxRates, nil
 }
 
 func equal(a, b []string) bool {
