@@ -40,20 +40,12 @@ type TaxRateResponse struct {
 }
 
 func main() {
-	//logFile, err := os.Create("debug.log")
-	//if err != nil {
-	//	log.Fatalf("Error creating log file: %v", err)
-	//}
-
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	//defer logFile.Close()
-	//log.SetOutput(logFile)
 	log.SetOutput(os.Stdout)
 
-	//http.HandleFunc("/getTaxRates", taxRatesHandler)
 	// wrapping function handler to resolve CORS issues
 	handler := http.HandlerFunc(taxRatesHandler)
 	http.Handle("/getTaxRates", corsMiddleware(handler))
@@ -73,7 +65,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }
@@ -102,13 +93,6 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error processing CSV: %v", err), http.StatusInternalServerError)
 		return
 	}
-
-	/*
-		// Set headers for download
-		    w.Header().Set("Content-Type", "text/csv")
-		    w.Header().Set("Content-Disposition", "attachment; filename=\"result.csv\"")
-		    w.Write(modifiedCSV)
-	*/
 
 	w.Header().Set("Content-Disposition", "attachment; filename=\"result.csv\"")
 	w.Header().Set("Content-Type", "text/csv")
