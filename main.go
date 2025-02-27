@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -21,7 +23,7 @@ type TaxRecord struct {
 	City   string
 	State  string
 	Zip    string
-	Taxes  map[string]float64 // Changed from individual tax fields to map
+	Taxes  map[string]float64
 }
 
 type TaxRateResponse struct {
@@ -90,17 +92,17 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename=\"result.csv\"")
-	w.Header().Set("Content-Type", "text/csv")
-	writer := csv.NewWriter(w)
-	defer writer.Flush()
+	// Create a buffer to write the ZIP file
+	buf := new(bytes.Buffer)
+	zipWriter := zip.NewWriter(buf)
 
-	// Get all unique jurisdiction names for headers
+	// Write due_by_charge.csv
+	dueByChargeBuf := new(bytes.Buffer)
+	dueByChargeWriter := csv.NewWriter(dueByChargeBuf)
 	jurisNames := getAllJurisNames(records)
-
 	headers := []string{"client", "date", "charge", "street address", "city", "State", "zip code"}
 	headers = append(headers, jurisNames...)
-	writer.Write(headers)
+	dueByChargeWriter.Write(headers)
 
 	for _, rec := range records {
 		row := []string{
@@ -112,16 +114,68 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 			rec.State,
 			rec.Zip,
 		}
-		// Add tax amounts for each jurisdiction in the same order as headers
 		for _, juris := range jurisNames {
 			tax := rec.Taxes[juris]
 			row = append(row, fmt.Sprintf("%.2f", tax))
 		}
-		writer.Write(row)
+		dueByChargeWriter.Write(row)
+	}
+	dueByChargeWriter.Flush()
+
+	f1, err := zipWriter.Create("due_by_charge.csv")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating ZIP entry: %v", err), http.StatusInternalServerError)
+		return
+	}
+	_, err = f1.Write(dueByChargeBuf.Bytes())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error writing due_by_charge.csv to ZIP: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Calculate totals per jurisdiction and write due_by_jurisdiction.csv
+	jurisTotals := make(map[string]float64)
+	for _, rec := range records {
+		for juris, tax := range rec.Taxes {
+			jurisTotals[juris] += tax
+		}
+	}
+
+	dueByJurisBuf := new(bytes.Buffer)
+	dueByJurisWriter := csv.NewWriter(dueByJurisBuf)
+	dueByJurisWriter.Write([]string{"Jurisdiction", "total"})
+	for juris, total := range jurisTotals {
+		dueByJurisWriter.Write([]string{juris, fmt.Sprintf("%.2f", total)})
+	}
+	dueByJurisWriter.Flush()
+
+	f2, err := zipWriter.Create("due_by_jurisdiction.csv")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating ZIP entry: %v", err), http.StatusInternalServerError)
+		return
+	}
+	_, err = f2.Write(dueByJurisBuf.Bytes())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error writing due_by_jurisdiction.csv to ZIP: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Close the ZIP writer
+	err = zipWriter.Close()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error closing ZIP: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Set headers and write the ZIP file to response
+	w.Header().Set("Content-Disposition", "attachment; filename=\"tax_results.zip\"")
+	w.Header().Set("Content-Type", "application/zip")
+	_, err = w.Write(buf.Bytes())
+	if err != nil {
+		log.Printf("Error writing ZIP to response: %v", err)
 	}
 }
 
-// Helper function to get all unique jurisdiction names
 func getAllJurisNames(records []TaxRecord) []string {
 	jurisSet := make(map[string]bool)
 	for _, rec := range records {
