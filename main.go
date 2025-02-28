@@ -92,7 +92,7 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a buffer to write the ZIP file
+	// Create a buffer for the ZIP file
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
 
@@ -102,7 +102,10 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 	jurisNames := getAllJurisNames(records)
 	headers := []string{"client", "date", "charge", "street address", "city", "State", "zip code"}
 	headers = append(headers, jurisNames...)
-	dueByChargeWriter.Write(headers)
+	if err := dueByChargeWriter.Write(headers); err != nil {
+		http.Error(w, fmt.Sprintf("Error writing due_by_charge headers: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	for _, rec := range records {
 		row := []string{
@@ -118,20 +121,29 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 			tax := rec.Taxes[juris]
 			row = append(row, fmt.Sprintf("%.2f", tax))
 		}
-		dueByChargeWriter.Write(row)
+		if err := dueByChargeWriter.Write(row); err != nil {
+			http.Error(w, fmt.Sprintf("Error writing due_by_charge row: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 	dueByChargeWriter.Flush()
-
-	f1, err := zipWriter.Create("due_by_charge.csv")
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error creating ZIP entry: %v", err), http.StatusInternalServerError)
+	if err := dueByChargeWriter.Error(); err != nil {
+		http.Error(w, fmt.Sprintf("Error flushing due_by_charge writer: %v", err), http.StatusInternalServerError)
 		return
 	}
-	_, err = f1.Write(dueByChargeBuf.Bytes())
+
+	log.Printf("due_by_charge.csv content length: %d bytes", dueByChargeBuf.Len())
+	f1, err := zipWriter.Create("due_by_charge.csv")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating due_by_charge.zip entry: %v", err), http.StatusInternalServerError)
+		return
+	}
+	n1, err := io.Copy(f1, dueByChargeBuf)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error writing due_by_charge.csv to ZIP: %v", err), http.StatusInternalServerError)
 		return
 	}
+	log.Printf("due_by_charge.csv written to ZIP: %d bytes", n1)
 
 	// Calculate totals per jurisdiction and write due_by_jurisdiction.csv
 	jurisTotals := make(map[string]float64)
@@ -143,37 +155,55 @@ func taxRatesHandler(w http.ResponseWriter, r *http.Request) {
 
 	dueByJurisBuf := new(bytes.Buffer)
 	dueByJurisWriter := csv.NewWriter(dueByJurisBuf)
-	dueByJurisWriter.Write([]string{"Jurisdiction", "total"})
-	for juris, total := range jurisTotals {
-		dueByJurisWriter.Write([]string{juris, fmt.Sprintf("%.2f", total)})
-	}
-	dueByJurisWriter.Flush()
-
-	f2, err := zipWriter.Create("due_by_jurisdiction.csv")
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error creating ZIP entry: %v", err), http.StatusInternalServerError)
+	if err := dueByJurisWriter.Write([]string{"Jurisdiction", "total"}); err != nil {
+		http.Error(w, fmt.Sprintf("Error writing due_by_jurisdiction headers: %v", err), http.StatusInternalServerError)
 		return
 	}
-	_, err = f2.Write(dueByJurisBuf.Bytes())
+	for juris, total := range jurisTotals {
+		if err := dueByJurisWriter.Write([]string{juris, fmt.Sprintf("%.2f", total)}); err != nil {
+			http.Error(w, fmt.Sprintf("Error writing due_by_jurisdiction row: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+	dueByJurisWriter.Flush()
+	if err := dueByJurisWriter.Error(); err != nil {
+		http.Error(w, fmt.Sprintf("Error flushing due_by_jurisdiction writer: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("due_by_jurisdiction.csv content length: %d bytes", dueByJurisBuf.Len())
+	f2, err := zipWriter.Create("due_by_jurisdiction.csv")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating due_by_jurisdiction.zip entry: %v", err), http.StatusInternalServerError)
+		return
+	}
+	n2, err := io.Copy(f2, dueByJurisBuf)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error writing due_by_jurisdiction.csv to ZIP: %v", err), http.StatusInternalServerError)
 		return
 	}
+	log.Printf("due_by_jurisdiction.csv written to ZIP: %d bytes", n2)
 
-	// Close the ZIP writer
-	err = zipWriter.Close()
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error closing ZIP: %v", err), http.StatusInternalServerError)
+	// Explicitly close the ZIP writer before sending
+	if err := zipWriter.Close(); err != nil {
+		http.Error(w, fmt.Sprintf("Error closing ZIP writer: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Set headers and write the ZIP file to response
-	w.Header().Set("Content-Disposition", "attachment; filename=\"tax_results.zip\"")
+	log.Printf("Final ZIP file size: %d bytes", buf.Len())
+
+	// Set response headers
 	w.Header().Set("Content-Type", "application/zip")
-	_, err = w.Write(buf.Bytes())
+	w.Header().Set("Content-Disposition", "attachment; filename=\"tax_results.zip\"")
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
+
+	// Write the ZIP buffer to the response
+	n, err := w.Write(buf.Bytes())
 	if err != nil {
 		log.Printf("Error writing ZIP to response: %v", err)
+		return
 	}
+	log.Printf("Wrote %d bytes to HTTP response", n)
 }
 
 func getAllJurisNames(records []TaxRecord) []string {

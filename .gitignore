@@ -1,5 +1,3 @@
 workflow.txt
-taxFinderTest1.csv
-taxFinderTest2.csv
+*.csv
 debug.log
-output.csv
